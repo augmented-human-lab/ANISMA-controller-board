@@ -1,9 +1,10 @@
-#include "Wire.h"
+#include "./Wire.h"
+#include "./Adafruit_PWMServoDriver.h"
 
-#include <Adafruit_PWMServoDriver.h>
+
 
 // Init driver board with driver board I2C ID
-Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x5D);
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
 
 const uint8_t P_OFF = 0;
 const uint8_t P_GND = 1;
@@ -14,6 +15,7 @@ const uint8_t P_VCC = 2;
 uint8_t pinmap_in[8] = {9,10,13,14,6,5,2,1};
 uint8_t pinmap_en[8] = {8,11,12,15,7,4,3,0};
 
+// Adafruit_PWMServoDriver L+H LED Register Buffers
 uint16_t pwm_on_1[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 uint16_t pwm_off_1[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 uint16_t pwm_on_2[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
@@ -39,7 +41,7 @@ const char cmd_byte_end = 'E';
 const char cmd_byte_alloff = 'O';
 const char cmd_byte_version = 'V';
 
-// Vars for chained commands
+// Vars for incoming serial commands
 uint8_t conf_num  = 0;
 uint8_t conf_pin = 0;
 uint8_t conf_phase = 0;
@@ -89,8 +91,10 @@ void setPinPWM(int phase, int pin, uint16_t on, uint16_t off){
   } 
 }
 
+// phase 1-4, pin 0-7, mode P_GND P_VCC P_OFF, power 0-100
 void setPinPower(int phase, int pin, int mode, int power){
   int pwrval = map(power, 0, 100, 0, 4095);
+  
   if (mode == P_GND) {
     setPinPWM(phase, pinmap_in[pin], 0, 4096);    // Special value for signal fully off.
     setPinPWM(phase, pinmap_en[pin], 0, pwrval);  // Control power via EN PWM signal
@@ -106,7 +110,7 @@ void setPinPower(int phase, int pin, int mode, int power){
   }
 }
 
-
+// Updates all Adafruit_PWMServoDriver LED registers with auto-increment
 void updatePins(int phase){
   pwm.setAllPWMStart();
   for (int i = 0; i<16; i++) {
@@ -121,27 +125,6 @@ void updatePins(int phase){
     }
   }
   pwm.setAllPWMEnd();
-}
-
-void setup() {
-  Serial.begin(9600);
-
-  // On serial connection identify as anisma driver controller board with version
-  while (!Serial){};
-  Serial.println("anisma-v0.1");
-
-  pwm.begin();
-  pwm.setPWMFreq(pwmfrequency);
-  Wire.setClock(400000);
-
-  // turn everything off
-  for (uint8_t pin=0; pin<8; pin++) {
-    setPinPower(1, pin, P_OFF, 0);
-    setPinPower(2, pin, P_OFF, 0);
-    setPinPower(3, pin, P_OFF, 0);
-    setPinPower(4, pin, P_OFF, 0);
-  }
-
 }
 
 void checkInput(){
@@ -165,7 +148,6 @@ void checkInput(){
           uint8_t index = 8*p+i;
           
           if (conf_duration[index] > 0) {
-            Serial.println("pin");
             setPinPower(p+1, i, conf_pin_mode[index], conf_pwr[index]);
             conf_turnoff_time[index] = curtime + (unsigned long)conf_duration[index];
           }
@@ -249,6 +231,26 @@ void handleSequence(){
   }
 }
 
+void setup() {
+  Serial.begin(9600);
+
+  // On serial connection identify as anisma driver controller board with version
+  while (!Serial){};
+  Serial.println("anisma-v0.1");
+
+  pwm.begin();
+  pwm.setPWMFreq(pwmfrequency);
+  Wire.setClock(400000);
+
+  // turn everything off
+  for (uint8_t pin=0; pin<8; pin++) {
+    setPinPower(1, pin, P_OFF, 0);
+    setPinPower(2, pin, P_OFF, 0);
+    setPinPower(3, pin, P_OFF, 0);
+    setPinPower(4, pin, P_OFF, 0);
+  }
+
+}
 
 void loop() {
   checkInput();
